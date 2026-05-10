@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>💳 Payment - Lucky Draw</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
+    <script>
+      // Check if Razorpay script loaded
+      window.addEventListener("load", function () {
+        if (typeof Razorpay === "undefined") {
+          console.error("Razorpay script failed to load");
+          document.addEventListener("DOMContentLoaded", function () {
+            addStatusMessage(
+              "Payment gateway not available. Please check your internet connection.",
+              "error"
+            );
+          });
+        } else {
+          console.log("Razorpay script loaded successfully");
+        }
+      });
+    </script>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      .gradient-bg {
+        background: #f5f0e6; /* Darker warm beige background */
+      }
+      .card-glow {
+        box-shadow: 0 0 30px rgba(255, 215, 0, 0.2);
+        background: #f8f5ef; /* Slightly darker beige for cards */
+      }
+      .btn-hover:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(255, 215, 0, 0.4);
+      }
+      .warm-brown-text {
+        color: #5c3a21; /* Warm brown for main text */
+      }
+      .warm-brown-light {
+        color: #8b6f5c; /* Lighter warm brown for secondary text */
+      }
+      .golden-accent {
+        background: linear-gradient(
+          135deg,
+          #ffd700 0%,
+          #ffa500 100%
+        ); /* Golden yellow to orange */
+      }
+      .golden-icon {
+        color: #ffd700; /* Golden yellow for icons */
+      }
+
+      /* Payment Status Styles */
+      .payment-status {
+        transition: all 0.3s ease;
+      }
+
+      .payment-status.pending {
+        background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
+        animation: pulse 2s infinite;
+      }
+
+      .payment-status.success {
+        background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+        animation: successPulse 1s ease;
+      }
+
+      .payment-status.failed {
+        background: linear-gradient(135deg, #dc3545 0%, #e74c3c 100%);
+      }
+
+      @keyframes pulse {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0.7;
+        }
+      }
+
+      @keyframes successPulse {
+        0% {
+          transform: scale(1);
+        }
+        50% {
+          transform: scale(1.05);
+        }
+        100% {
+          transform: scale(1);
+        }
+      }
+
+      /* Loading Animation */
+      .loading-spinner {
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #ffd700;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        animation: spin 1s linear infinite;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
+  </head>
+  <body class="gradient-bg min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white/80 backdrop-blur-md border-b border-yellow-200/30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center py-4">
+          <div class="flex items-center space-x-3">
+            <i class="fas fa-gift golden-icon text-3xl"></i>
+            <h1 class="text-2xl font-bold warm-brown-text">Lucky Draw</h1>
+          </div>
+          <div class="warm-brown-light text-sm">
+            <i class="fas fa-user mr-2"></i>
+            <span>{{ user_data.name }}</span>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="py-8 px-4 sm:px-6 lg:px-8">
+      <div class="max-w-4xl mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-8">
+          <h2 class="text-4xl font-bold warm-brown-text mb-4">
+            Complete Your Payment
+          </h2>
+          <p class="warm-brown-light text-lg">
+            Secure payment powered by Razorpay
+          </p>
+        </div>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %} {% if
+        messages %} {% for category, message in messages %}
+        <div
+          class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6"
+          role="alert"
+        >
+          <span class="block sm:inline">{{ message }}</span>
+        </div>
+        {% endfor %} {% endif %} {% endwith %}
+
+        <!-- Payment Details Card -->
+        <div
+          class="card-glow backdrop-blur-md rounded-2xl p-8 border border-yellow-200/30 mb-8"
+        >
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <!-- Order Details -->
+            <div>
+              <h3 class="text-2xl font-bold warm-brown-text mb-6">
+                <i class="fas fa-receipt golden-icon mr-3"></i>
+                Order Details
+              </h3>
+
+              <div class="space-y-4">
+                <div class="flex justify-between items-center">
+                  <span class="warm-brown-light">Name:</span>
+                  <span class="warm-brown-text font-semibold"
+                    >{{ user_data.name }}</span
+                  >
+                </div>
+
+                <div class="flex justify-between items-center">
+                  <span class="warm-brown-light">Mobile:</span>
+                  <span class="warm-brown-text font-semibold"
+                    >{{ user_data.mobile }}</span
+                  >
+                </div>
+
+                <div class="flex justify-between items-center">
+                  <span class="warm-brown-light">Tickets:</span>
+                  <span class="warm-brown-text font-semibold"
+                    >{{ user_data.ticket_count }}</span
+                  >
+                </div>
+
+                <div class="flex justify-between items-center">
+                  <span class="warm-brown-light">Ticket Numbers:</span>
+                  <span class="warm-brown-text font-semibold text-sm">
+                    {{ user_data.tickets|join(', ') }}
+                  </span>
+                </div>
+
+                <div class="flex justify-between items-center text-xl">
+                  <span class="warm-brown-light font-semibold"
+                    >Total Amount:</span
+                  >
+                  <span class="golden-icon font-bold"
+                    >₹{{ user_data.total_amount }}</span
+                  >
+                </div>
+
+                <div class="flex justify-between items-center">
+                  <span class="warm-brown-light">Order ID:</span>
+                  <span class="warm-brown-text font-mono text-sm"
+                    >{{ order.id }}</span
+                  >
+                </div>
+              </div>
+            </div>
+
+            <!-- Payment Options -->
+            <div>
+              <h3 class="text-2xl font-bold warm-brown-text mb-6">
+                <i class="fas fa-credit-card golden-icon mr-3"></i>
+                Payment Options
+              </h3>
+
+              <!-- Payment Status -->
+              <div
+                id="payment-status"
+                class="payment-status pending rounded-lg p-6 mb-6 text-center"
+              >
+                <div class="flex items-center justify-center space-x-3">
+                  <div class="loading-spinner"></div>
+                  <div>
+                    <h4 class="text-white font-bold text-lg">
+                      Payment Pending
+                    </h4>
+                    <p class="text-white/90 text-sm">
+                      Waiting for payment confirmation...
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Razorpay Button -->
+              <button
+                id="razorpay-button"
+                class="w-full golden-accent text-white font-bold py-4 px-8 rounded-xl btn-hover transition-all duration-300 text-lg flex items-center justify-center space-x-3"
+                onclick="initiatePayment()"
+              >
+                <i class="fas fa-rupee-sign mr-2"></i>
+                <span>Pay ₹{{ user_data.total_amount }}</span>
+              </button>
+
+              <!-- Fallback Payment Button -->
+              <button
+                id="fallback-button"
+                class="w-full bg-blue-600 text-white font-bold py-4 px-8 rounded-xl btn-hover transition-all duration-300 text-lg flex items-center justify-center space-x-3 mt-3"
+                onclick="showFallbackPayment()"
+                style="display: none"
+              >
+                <i class="fas fa-credit-card mr-2"></i>
+                <span>Alternative Payment Method</span>
+              </button>
+
+              <!-- Alternative UPI Payment -->
+              <div class="mt-6 p-4 bg-white/50 rounded-lg">
+                <h4 class="warm-brown-text font-semibold mb-3">
+                  <i class="fas fa-qrcode golden-icon mr-2"></i>
+                  Alternative: UPI Payment
+                </h4>
+                <p class="warm-brown-light text-sm mb-3">
+                  Scan QR code or use UPI ID:
+                  <strong>{{ user_data.upi_id }}</strong>
+                </p>
+                <img
+                  src="{{ url_for('static', filename='images/actual_upi_qr.jpeg') }}"
+                  alt="UPI QR Code"
+                  class="w-32 h-32 mx-auto border-2 border-yellow-200 rounded-lg"
+                />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Real-time Payment Status -->
+        <div
+          id="realtime-status"
+          class="card-glow backdrop-blur-md rounded-2xl p-6 border border-yellow-200/30 hidden"
+        >
+          <h3 class="text-xl font-bold warm-brown-text mb-4">
+            <i class="fas fa-broadcast-tower golden-icon mr-2"></i>
+            Real-time Payment Status
+          </h3>
+          <div id="status-messages" class="space-y-2">
+            <!-- Status messages will be added here -->
+          </div>
+        </div>
+
+        <!-- Success Message (Hidden by default) -->
+        <div
+          id="success-message"
+          class="card-glow backdrop-blur-md rounded-2xl p-8 border border-green-200/30 hidden"
+        >
+          <div class="text-center">
+            <div class="text-6xl mb-4">🎉</div>
+            <h3 class="text-3xl font-bold text-green-700 mb-4">
+              Payment Successful!
+            </h3>
+            <p class="text-green-600 text-lg mb-6">
+              Your tickets have been booked successfully. You will receive a
+              confirmation shortly.
+            </p>
+            <button
+              onclick="window.location.href='/'"
+              class="golden-accent text-white font-bold py-3 px-6 rounded-lg btn-hover transition-all duration-300"
+            >
+              <i class="fas fa-home mr-2"></i>
+              Back to Home
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer
+      class="bg-white/80 backdrop-blur-md border-t border-yellow-200/30 py-4 mt-12"
+    >
+      <div class="max-w-7xl mx-auto px-4 text-center warm-brown-light text-sm">
+        <p>&copy; 2025 Lucky Draw. All rights reserved.</p>
+      </div>
+    </footer>
+
+    <script>
+      // Initialize Socket.IO connection
+      const socket = io();
+
+      // Payment configuration
+      const paymentConfig = {
+        key: '{{ razorpay_key_id }}',
+        amount: {{ user_data.total_amount * 100 }}, // Amount in paise
+        currency: 'INR',
+        name: 'Lucky Draw',
+        description: 'Ticket Booking',
+        order_id: '{{ order.id }}',
+        handler: function(response) {
+          console.log('Payment successful:', response);
+          handlePaymentSuccess(response);
+        },
+        prefill: {
+          name: '{{ user_data.name }}',
+          contact: '{{ user_data.mobile }}'
+        },
+        theme: {
+          color: '#ffd700'
+        }
+      };
+
+      // Initialize payment
+      function initiatePayment() {
+        try {
+          console.log('Initiating payment with config:', paymentConfig);
+
+          // Check if Razorpay is loaded
+          if (typeof Razorpay === 'undefined') {
+            console.error('Razorpay not loaded');
+            addStatusMessage('Payment gateway not loaded. Please refresh the page.', 'error');
+            document.getElementById('fallback-button').style.display = 'block';
+            return;
+          }
+
+          const rzp = new Razorpay(paymentConfig);
+
+          // Add error handler
+          rzp.on('payment.failed', function (response) {
+            console.error('Payment failed:', response.error);
+            updatePaymentStatus('failed', 'Payment Failed', 'Payment was not completed');
+            addStatusMessage('Payment failed: ' + response.error.description, 'error');
+          });
+
+          // Open payment window
+          rzp.open();
+
+          // Show real-time status
+          document.getElementById('realtime-status').classList.remove('hidden');
+          addStatusMessage('Payment window opened', 'info');
+
+        } catch (error) {
+          console.error('Error initiating payment:', error);
+          addStatusMessage('Error opening payment window: ' + error.message, 'error');
+          updatePaymentStatus('failed', 'Payment Error', 'Unable to open payment window');
+          document.getElementById('fallback-button').style.display = 'block';
+        }
+      }
+
+      // Handle payment success
+      function handlePaymentSuccess(response) {
+        console.log('Payment completed:', response);
+
+        // Update payment status
+        updatePaymentStatus('success', 'Payment Successful!', 'Payment completed successfully');
+
+        // Send payment completion to server
+        socket.emit('payment_completed', {
+          order_id: '{{ order.id }}',
+          payment_id: response.razorpay_payment_id
+        });
+
+        addStatusMessage('Payment verified with Razorpay', 'success');
+
+        // Show success message after a delay
+        setTimeout(() => {
+          document.getElementById('success-message').classList.remove('hidden');
+          document.getElementById('razorpay-button').style.display = 'none';
+        }, 2000);
+      }
+
+      // Update payment status
+      function updatePaymentStatus(status, title, message) {
+        const statusElement = document.getElementById('payment-status');
+        const titleElement = statusElement.querySelector('h4');
+        const messageElement = statusElement.querySelector('p');
+
+        // Remove all status classes
+        statusElement.classList.remove('pending', 'success', 'failed');
+        statusElement.classList.add(status);
+
+        // Update content
+        titleElement.textContent = title;
+        messageElement.textContent = message;
+
+        // Update icon
+        const iconElement = statusElement.querySelector('.loading-spinner');
+        if (status === 'success') {
+          iconElement.className = 'fas fa-check-circle text-2xl text-white';
+        } else if (status === 'failed') {
+          iconElement.className = 'fas fa-times-circle text-2xl text-white';
+        }
+      }
+
+      // Add status message
+      function addStatusMessage(message, type = 'info') {
+        const messagesContainer = document.getElementById('status-messages');
+        const messageElement = document.createElement('div');
+
+        const colors = {
+          info: 'text-blue-600',
+          success: 'text-green-600',
+          error: 'text-red-600',
+          warning: 'text-yellow-600'
+        };
+
+        messageElement.className = `p-2 rounded ${colors[type]} text-sm`;
+        messageElement.innerHTML = `
+          <i class="fas fa-clock mr-2"></i>
+          ${new Date().toLocaleTimeString()}: ${message}
+        `;
+
+        messagesContainer.appendChild(messageElement);
+        messagesContainer.scrollTop = messagesContainer.scrollHeight;
+      }
+
+      // Socket.IO event listeners
+      socket.on('connect', function() {
+        console.log('Connected to server');
+        addStatusMessage('Connected to payment server', 'success');
+
+        // Join payment session
+        socket.emit('join_payment_session', {
+          session_id: '{{ order.id }}'
+        });
+      });
+
+      socket.on('disconnect', function() {
+        console.log('Disconnected from server');
+        addStatusMessage('Disconnected from payment server', 'error');
+      });
+
+      socket.on('payment_session_joined', function(data) {
+        console.log('Joined payment session:', data);
+        addStatusMessage('Joined payment session', 'success');
+      });
+
+      socket.on('payment_success', function(data) {
+        console.log('Payment success received:', data);
+
+        if (data.order_id === '{{ order.id }}') {
+          updatePaymentStatus('success', 'Payment Successful!', 'Payment completed and verified');
+          addStatusMessage('Payment confirmed by server', 'success');
+
+          // Show success message
+          setTimeout(() => {
+            document.getElementById('success-message').classList.remove('hidden');
+            document.getElementById('razorpay-button').style.display = 'none';
+          }, 1000);
+        }
+      });
+
+      // Show fallback payment method
+      function showFallbackPayment() {
+        addStatusMessage('Redirecting to manual payment verification...', 'info');
+        // Redirect to the old payment page with manual verification
+        window.location.href = '/payment_manual';
+      }
+
+      // Handle payment errors
+      window.addEventListener('error', function(e) {
+        if (e.message.includes('Razorpay')) {
+          updatePaymentStatus('failed', 'Payment Failed', 'An error occurred during payment');
+          addStatusMessage('Payment error: ' + e.message, 'error');
+        }
+      });
+
+      // Initialize on page load
+      document.addEventListener('DOMContentLoaded', function() {
+        addStatusMessage('Payment page loaded', 'info');
+      });
+    </script>
+  </body>
+</html>

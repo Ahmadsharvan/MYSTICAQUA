@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🎯 Lucky Draw - Welcome</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      .gradient-bg {
+        background: #f5f0e6; /* Darker warm beige background */
+      }
+      .card-glow {
+        box-shadow: 0 0 30px rgba(255, 215, 0, 0.2);
+        background: #f8f5ef; /* Slightly darker beige for cards */
+      }
+      .input-focus:focus {
+        box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.3);
+      }
+      .btn-hover:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(255, 215, 0, 0.4);
+      }
+      .warm-brown-text {
+        color: #5c3a21; /* Warm brown for main text */
+      }
+      .warm-brown-light {
+        color: #8b6f5c; /* Lighter warm brown for secondary text */
+      }
+      .golden-accent {
+        background: linear-gradient(
+          135deg,
+          #ffd700 0%,
+          #ffa500 100%
+        ); /* Golden yellow to orange */
+      }
+      .golden-icon {
+        color: #ffd700; /* Golden yellow for icons */
+      }
+    </style>
+  </head>
+  <body class="gradient-bg min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white/80 backdrop-blur-md border-b border-yellow-200/30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center py-4">
+          <div class="flex items-center space-x-3">
+            <i class="fas fa-gift golden-icon text-3xl"></i>
+            <h1 class="text-2xl font-bold warm-brown-text">Lucky Draw</h1>
+          </div>
+          <div class="warm-brown-light text-sm">
+            <i class="fas fa-calendar-alt mr-2"></i>
+            <span id="current-date"></span>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div
+      class="flex items-center justify-center min-h-screen py-12 px-4 sm:px-6 lg:px-8"
+    >
+      <div class="max-w-md w-full space-y-8">
+        <!-- Header -->
+        <div class="text-center">
+          <div
+            class="mx-auto h-24 w-24 golden-accent rounded-full flex items-center justify-center mb-6"
+          >
+            <i class="fas fa-star text-4xl text-white"></i>
+          </div>
+          <h2 class="text-4xl font-bold warm-brown-text mb-2">Welcome!</h2>
+          <p class="warm-brown-light text-lg">
+            Join our exciting Lucky Draw and win amazing prizes!
+          </p>
+        </div>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %} {% if
+        messages %} {% for category, message in messages %}
+        <div
+          class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative"
+          role="alert"
+        >
+          <span class="block sm:inline">{{ message }}</span>
+        </div>
+        {% endfor %} {% endif %} {% endwith %}
+
+        <!-- User Info Form -->
+        <div
+          class="card-glow backdrop-blur-md rounded-2xl p-8 border border-yellow-200/30"
+        >
+          <form
+            class="space-y-6"
+            method="POST"
+            action="{{ url_for('submit_user') }}"
+          >
+            <div>
+              <label
+                for="name"
+                class="block text-sm font-medium warm-brown-text mb-2"
+              >
+                <i class="fas fa-user mr-2"></i>Full Name
+              </label>
+              <input
+                id="name"
+                name="name"
+                type="text"
+                required
+                class="w-full px-4 py-3 bg-white border border-yellow-200 rounded-lg warm-brown-text placeholder-gray-500 input-focus transition-all duration-300 focus:outline-none focus:border-yellow-400"
+                placeholder="Enter your full name"
+              />
+            </div>
+
+            <div>
+              <label
+                for="mobile"
+                class="block text-sm font-medium warm-brown-text mb-2"
+              >
+                <i class="fas fa-mobile-alt mr-2"></i>Mobile Number
+              </label>
+              <input
+                id="mobile"
+                name="mobile"
+                type="tel"
+                required
+                pattern="[0-9]{10}"
+                maxlength="10"
+                class="w-full px-4 py-3 bg-white border border-yellow-200 rounded-lg warm-brown-text placeholder-gray-500 input-focus transition-all duration-300 focus:outline-none focus:border-yellow-400"
+                placeholder="Enter 10-digit mobile number"
+              />
+              <p class="warm-brown-light text-xs mt-1">Format: 9876543210</p>
+            </div>
+
+            <button
+              type="submit"
+              class="w-full golden-accent text-white font-bold py-3 px-6 rounded-lg btn-hover transition-all duration-300 flex items-center justify-center space-x-2"
+            >
+              <i class="fas fa-arrow-right"></i>
+              <span>Continue to Payment</span>
+            </button>
+          </form>
+        </div>
+
+        <!-- Features -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-8">
+          <div class="text-center warm-brown-light">
+            <i class="fas fa-ticket-alt golden-icon text-2xl mb-2"></i>
+            <p class="text-sm">500 Tickets Available</p>
+          </div>
+          <div class="text-center warm-brown-light">
+            <i class="fas fa-rupee-sign golden-icon text-2xl mb-2"></i>
+            <p class="text-sm">₹5 per Ticket</p>
+          </div>
+          <div class="text-center warm-brown-light">
+            <i class="fas fa-gift golden-icon text-2xl mb-2"></i>
+            <p class="text-sm">Amazing Prizes</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer
+      class="bg-white/80 backdrop-blur-md border-t border-yellow-200/30 py-4"
+    >
+      <div class="max-w-7xl mx-auto px-4 text-center warm-brown-light text-sm">
+        <p>&copy; 2025 Lucky Draw. All rights reserved.</p>
+      </div>
+    </footer>
+
+    <script>
+      // Set current date
+      document.getElementById("current-date").textContent =
+        new Date().toLocaleDateString("en-US", {
+          weekday: "long",
+          year: "numeric",
+          month: "long",
+          day: "numeric",
+        });
+
+      // Mobile number validation
+      document.getElementById("mobile").addEventListener("input", function (e) {
+        this.value = this.value.replace(/[^0-9]/g, "");
+      });
+
+      // Form validation
+      document.querySelector("form").addEventListener("submit", function (e) {
+        const name = document.getElementById("name").value.trim();
+        const mobile = document.getElementById("mobile").value.trim();
+
+        if (!name) {
+          e.preventDefault();
+          alert("Please enter your full name");
+          return;
+        }
+
+        if (mobile.length !== 10 || !/^\d{10}$/.test(mobile)) {
+          e.preventDefault();
+          alert("Please enter a valid 10-digit mobile number");
+          return;
+        }
+      });
+    </script>
+  </body>
+</html>

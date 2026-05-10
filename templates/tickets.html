@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>🎫 Select Tickets - Lucky Draw</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      .gradient-bg {
+        background: #f5f0e6; /* Darker warm beige background */
+      }
+      .card-glow {
+        box-shadow: 0 0 30px rgba(255, 215, 0, 0.2);
+        background: #f8f5ef; /* Slightly darker beige for cards */
+      }
+      .ticket-card {
+        transition: all 0.3s ease;
+        cursor: pointer;
+        position: relative;
+      }
+      .ticket-card:hover:not(.booked) {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 25px rgba(255, 215, 0, 0.4);
+      }
+      .ticket-card.selected {
+        border-color: #ffd700;
+        background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
+        transform: scale(1.05);
+      }
+      .ticket-card.booked {
+        opacity: 0.6;
+        cursor: not-allowed;
+      }
+      .ticket-image {
+        background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-weight: bold;
+      }
+      .btn-hover:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 10px 25px rgba(255, 215, 0, 0.4);
+      }
+      .search-input:focus {
+        box-shadow: 0 0 0 3px rgba(255, 215, 0, 0.3);
+      }
+      .warm-brown-text {
+        color: #5c3a21; /* Warm brown for main text */
+      }
+      .warm-brown-light {
+        color: #8b6f5c; /* Lighter warm brown for secondary text */
+      }
+      .golden-accent {
+        background: linear-gradient(
+          135deg,
+          #ffd700 0%,
+          #ffa500 100%
+        ); /* Golden yellow to orange */
+      }
+      .golden-icon {
+        color: #ffd700; /* Golden yellow for icons */
+      }
+
+      /* Ticket Animation Styles */
+      .ticket-animation-container {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 1000;
+      }
+
+      .ticket-animation {
+        position: absolute;
+        transition: all 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+        transform-origin: center;
+      }
+
+      .ticket-tear-effect {
+        position: relative;
+        overflow: hidden;
+      }
+
+      .ticket-tear-effect::before {
+        content: "";
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
+        transform: scaleX(0);
+        transform-origin: left;
+        transition: transform 0.6s ease;
+      }
+
+      .ticket-tear-effect.tearing::before {
+        transform: scaleX(1);
+      }
+
+      .selected-tickets-sidebar {
+        position: fixed;
+        right: 20px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: rgba(255, 255, 255, 0.95);
+        backdrop-filter: blur(10px);
+        border-radius: 15px;
+        padding: 20px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
+        border: 2px solid #ffd700;
+        max-height: 80vh;
+        overflow-y: auto;
+        z-index: 100;
+      }
+
+      .selected-ticket-item {
+        background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
+        color: white;
+        padding: 10px;
+        margin: 5px 0;
+        border-radius: 8px;
+        text-align: center;
+        font-weight: bold;
+        animation: ticketBounce 0.5s ease;
+      }
+
+      @keyframes ticketBounce {
+        0% {
+          transform: scale(0.8);
+          opacity: 0;
+        }
+        50% {
+          transform: scale(1.1);
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+
+      .ticket-zoom-center {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%) scale(0);
+        z-index: 999;
+        background: linear-gradient(135deg, #ffd700 0%, #ffa500 100%);
+        color: white;
+        padding: 30px;
+        border-radius: 15px;
+        box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+        animation: zoomInOut 1.2s ease-in-out;
+      }
+
+      @keyframes zoomInOut {
+        0% {
+          transform: translate(-50%, -50%) scale(0);
+          opacity: 0;
+        }
+        50% {
+          transform: translate(-50%, -50%) scale(1.5);
+          opacity: 1;
+        }
+        100% {
+          transform: translate(-50%, -50%) scale(0);
+          opacity: 0;
+        }
+      }
+    </style>
+  </head>
+  <body class="gradient-bg min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white/80 backdrop-blur-md border-b border-yellow-200/30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center py-4">
+          <div class="flex items-center space-x-3">
+            <i class="fas fa-gift golden-icon text-3xl"></i>
+            <h1 class="text-2xl font-bold warm-brown-text">Lucky Draw</h1>
+          </div>
+          <div class="warm-brown-light text-sm">
+            <i class="fas fa-user mr-2"></i>
+            <span>{{ user_name }}</span>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="py-8 px-4 sm:px-6 lg:px-8">
+      <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-8">
+          <h2 class="text-4xl font-bold warm-brown-text mb-4">
+            Select Your Lucky Tickets
+          </h2>
+          <p class="warm-brown-light text-lg">
+            Choose from 500 available tickets. Booked tickets are shown in red.
+          </p>
+        </div>
+
+        <!-- Flash Messages -->
+        {% with messages = get_flashed_messages(with_categories=true) %} {% if
+        messages %} {% for category, message in messages %}
+        <div
+          class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-6"
+          role="alert"
+        >
+          <span class="block sm:inline">{{ message }}</span>
+        </div>
+        {% endfor %} {% endif %} {% endwith %}
+
+        <!-- Controls -->
+        <div
+          class="card-glow backdrop-blur-md rounded-2xl p-6 mb-8 border border-yellow-200/30"
+        >
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4 items-center">
+            <div>
+              <label
+                for="search"
+                class="block text-sm font-medium warm-brown-text mb-2"
+              >
+                <i class="fas fa-search mr-2"></i>Search Tickets
+              </label>
+              <input
+                type="text"
+                id="search"
+                placeholder="Enter ticket number..."
+                class="w-full px-4 py-2 bg-white border border-yellow-200 rounded-lg warm-brown-text placeholder-gray-500 search-input transition-all duration-300 focus:outline-none focus:border-yellow-400"
+              />
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium warm-brown-text mb-2">
+                <i class="fas fa-filter mr-2"></i>Filter
+              </label>
+              <select
+                id="filter"
+                class="w-full px-4 py-2 bg-white border border-yellow-200 rounded-lg warm-brown-text focus:outline-none focus:border-yellow-400"
+              >
+                <option value="all">All Tickets</option>
+                <option value="available">Available Only</option>
+                <option value="booked">Booked Only</option>
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium warm-brown-text mb-2">
+                <i class="fas fa-ticket-alt mr-2"></i>Selected
+              </label>
+              <div class="text-2xl font-bold golden-icon" id="selected-count">
+                0
+              </div>
+            </div>
+
+            <div class="flex items-end">
+              <button
+                id="submit-btn"
+                disabled
+                class="w-full golden-accent text-white font-bold py-2 px-6 rounded-lg btn-hover transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center space-x-2"
+              >
+                <i class="fas fa-arrow-right mr-2"></i>
+                <span>Proceed to Payment</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Ticket Grid -->
+        <div
+          class="card-glow backdrop-blur-md rounded-2xl p-6 border border-yellow-200/30"
+        >
+          <div
+            class="grid grid-cols-5 sm:grid-cols-10 md:grid-cols-15 lg:grid-cols-20 xl:grid-cols-25 gap-2"
+            id="ticket-grid"
+          >
+            {% for ticket_num in range(1, 501) %} {% set ticket_key =
+            "%04d"|format(ticket_num) %} {% set ticket_data =
+            tickets.get(ticket_key, {}) %} {% set is_available =
+            ticket_data.get('available', True) %} {% set is_booked = not
+            is_available %}
+
+            <div
+              class="ticket-card {% if is_booked %}booked{% endif %} bg-white/80 rounded-lg p-2 border-2 border-yellow-200 text-center"
+              data-ticket="{{ ticket_key }}"
+              data-available="{{ 'true' if is_available else 'false' }}"
+            >
+              {% if is_available %}
+              <input
+                type="checkbox"
+                name="tickets"
+                value="{{ ticket_key }}"
+                class="ticket-checkbox sr-only"
+                id="ticket-{{ ticket_key }}"
+              />
+              <label for="ticket-{{ ticket_key }}" class="cursor-pointer block">
+                <div class="ticket-image h-12 w-full mb-2 text-xs">
+                  <i class="fas fa-ticket-alt"></i>
+                </div>
+                <div class="warm-brown-text font-mono text-xs">
+                  {{ ticket_key }}
+                </div>
+              </label>
+              {% else %}
+              <div class="ticket-image h-12 w-full mb-2 text-xs bg-red-500">
+                <i class="fas fa-times"></i>
+              </div>
+              <div class="text-red-400 font-mono text-xs">{{ ticket_key }}</div>
+              <div class="text-red-300 text-xs">Booked</div>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- Ticket Selection Form -->
+        <form
+          id="ticket-selection-form"
+          method="POST"
+          action="{{ url_for('process_ticket_selection') }}"
+          class="mt-8"
+        >
+          <div
+            id="selected-tickets-display"
+            class="card-glow backdrop-blur-md rounded-2xl p-6 border border-yellow-200/30 mb-6 hidden"
+          >
+            <h3 class="text-xl font-bold warm-brown-text mb-4">
+              Selected Tickets:
+            </h3>
+            <div id="selected-tickets-list" class="flex flex-wrap gap-2"></div>
+            <div class="mt-4 text-center">
+              <p class="warm-brown-light text-lg">
+                <i class="fas fa-rupee-sign golden-icon mr-2"></i>
+                Total Amount:
+                <span class="text-2xl font-bold golden-icon" id="total-amount"
+                  >₹0</span
+                >
+              </p>
+              <p class="warm-brown-light text-sm">
+                ₹{{ ticket_price }} per ticket
+              </p>
+            </div>
+          </div>
+
+          <div class="text-center">
+            <button
+              type="submit"
+              id="final-submit-btn"
+              disabled
+              class="golden-accent text-white font-bold py-4 px-8 rounded-xl btn-hover transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed text-lg flex items-center justify-center space-x-3 mx-auto"
+            >
+              <i class="fas fa-credit-card mr-2"></i>
+              <span>Proceed to Payment</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Selected Tickets Sidebar -->
+    <div id="selected-tickets-sidebar" class="selected-tickets-sidebar hidden">
+      <h3 class="warm-brown-text font-bold mb-3 text-center">
+        Selected Tickets
+      </h3>
+      <div id="sidebar-tickets-list"></div>
+    </div>
+
+    <!-- Ticket Animation Container -->
+    <div
+      id="ticket-animation-container"
+      class="ticket-animation-container"
+    ></div>
+
+    <!-- Footer -->
+    <footer
+      class="bg-white/80 backdrop-blur-md border-t border-yellow-200/30 py-4 mt-12"
+    >
+      <div class="max-w-7xl mx-auto px-4 text-center warm-brown-light text-sm">
+        <p>&copy; 2025 Lucky Draw. All rights reserved.</p>
+      </div>
+    </footer>
+
+    <script>
+      let selectedTickets = new Set();
+      const ticketGrid = document.getElementById("ticket-grid");
+      const selectedCount = document.getElementById("selected-count");
+      const submitBtn = document.getElementById("submit-btn");
+      const finalSubmitBtn = document.getElementById("final-submit-btn");
+      const selectedTicketsDisplay = document.getElementById(
+        "selected-tickets-display"
+      );
+      const selectedTicketsList = document.getElementById(
+        "selected-tickets-list"
+      );
+      const searchInput = document.getElementById("search");
+      const filterSelect = document.getElementById("filter");
+      const totalAmount = document.getElementById("total-amount");
+      const sidebar = document.getElementById("selected-tickets-sidebar");
+      const sidebarTicketsList = document.getElementById("sidebar-tickets-list");
+
+      // Handle ticket selection with animation
+      document.querySelectorAll(".ticket-checkbox").forEach((checkbox) => {
+        checkbox.addEventListener("change", function () {
+          const ticketNum = this.value;
+          const ticketCard = this.closest(".ticket-card");
+
+          if (this.checked) {
+            selectedTickets.add(ticketNum);
+            ticketCard.classList.add("selected");
+
+            // Animate ticket selection
+            animateTicketSelection(ticketCard, ticketNum);
+          } else {
+            selectedTickets.delete(ticketNum);
+            ticketCard.classList.remove("selected");
+
+            // Remove from sidebar
+            removeTicketFromSidebar(ticketNum);
+          }
+
+          updateSelectedCount();
+          updateSubmitButtons();
+          updateSelectedTicketsDisplay();
+          updateTotalAmount();
+          updateSidebar();
+        });
+      });
+
+      // Ticket selection animation
+      function animateTicketSelection(ticketCard, ticketNum) {
+        // Get ticket position
+        const rect = ticketCard.getBoundingClientRect();
+        const centerX = rect.left + rect.width / 2;
+        const centerY = rect.top + rect.height / 2;
+
+        // Create animated ticket element
+        const animatedTicket = document.createElement('div');
+        animatedTicket.className = 'ticket-zoom-center';
+        animatedTicket.innerHTML = `
+          <div class="text-center">
+            <i class="fas fa-ticket-alt text-4xl mb-2"></i>
+            <div class="text-2xl font-bold">${ticketNum}</div>
+            <div class="text-sm">Selected!</div>
+          </div>
+        `;
+        animatedTicket.style.left = centerX + 'px';
+        animatedTicket.style.top = centerY + 'px';
+
+        // Add to animation container
+        const container = document.getElementById('ticket-animation-container');
+        container.appendChild(animatedTicket);
+
+        // Remove after animation
+        setTimeout(() => {
+          container.removeChild(animatedTicket);
+        }, 1200);
+      }
+
+      // Update sidebar
+      function updateSidebar() {
+        if (selectedTickets.size > 0) {
+          sidebar.classList.remove('hidden');
+          sidebarTicketsList.innerHTML = '';
+
+          Array.from(selectedTickets).sort().forEach(ticket => {
+            const ticketItem = document.createElement('div');
+            ticketItem.className = 'selected-ticket-item';
+            ticketItem.textContent = ticket;
+            ticketItem.id = `sidebar-ticket-${ticket}`;
+            sidebarTicketsList.appendChild(ticketItem);
+          });
+        } else {
+          sidebar.classList.add('hidden');
+        }
+      }
+
+      // Remove ticket from sidebar
+      function removeTicketFromSidebar(ticketNum) {
+        const ticketItem = document.getElementById(`sidebar-ticket-${ticketNum}`);
+        if (ticketItem) {
+          ticketItem.remove();
+        }
+      }
+
+      // Update selected count
+      function updateSelectedCount() {
+        selectedCount.textContent = selectedTickets.size;
+      }
+
+      // Update submit buttons
+      function updateSubmitButtons() {
+        const hasSelection = selectedTickets.size > 0;
+        submitBtn.disabled = !hasSelection;
+        finalSubmitBtn.disabled = !hasSelection;
+      }
+
+      // Update selected tickets display
+      function updateSelectedTicketsDisplay() {
+        if (selectedTickets.size > 0) {
+          selectedTicketsDisplay.classList.remove("hidden");
+          selectedTicketsList.innerHTML = "";
+
+          Array.from(selectedTickets)
+            .sort()
+            .forEach((ticket) => {
+              const ticketDiv = document.createElement("div");
+              ticketDiv.className =
+                "golden-accent text-white px-3 py-1 rounded-full text-sm font-mono";
+              ticketDiv.textContent = ticket;
+              selectedTicketsList.appendChild(ticketDiv);
+            });
+        } else {
+          selectedTicketsDisplay.classList.add("hidden");
+        }
+      }
+
+      // Update total amount
+      function updateTotalAmount() {
+        const amount = selectedTickets.size * {{ ticket_price }};
+        totalAmount.textContent = `₹${amount}`;
+      }
+
+      // Search functionality
+      searchInput.addEventListener("input", function () {
+        const searchTerm = this.value.toLowerCase();
+        const tickets = document.querySelectorAll(".ticket-card");
+
+        tickets.forEach((ticket) => {
+          const ticketNum = ticket.dataset.ticket;
+          if (ticketNum.includes(searchTerm)) {
+            ticket.style.display = "block";
+          } else {
+            ticket.style.display = "none";
+          }
+        });
+      });
+
+      // Filter functionality
+      filterSelect.addEventListener("change", function () {
+        const filterValue = this.value;
+        const tickets = document.querySelectorAll(".ticket-card");
+
+        tickets.forEach((ticket) => {
+          const isAvailable = ticket.dataset.available === "true";
+
+          switch (filterValue) {
+            case "available":
+              ticket.style.display = isAvailable ? "block" : "none";
+              break;
+            case "booked":
+              ticket.style.display = !isAvailable ? "block" : "none";
+              break;
+            default:
+              ticket.style.display = "block";
+          }
+        });
+      });
+
+                          // Form submission
+       document
+         .getElementById("ticket-selection-form")
+         .addEventListener("submit", function (e) {
+           console.log("Form submission triggered");
+           console.log("Selected tickets:", selectedTickets);
+
+           if (selectedTickets.size === 0) {
+             e.preventDefault();
+             alert("Please select at least one ticket");
+             return;
+           }
+
+           // Clear any existing hidden inputs
+           const existingInputs = this.querySelectorAll('input[name="tickets"]');
+           existingInputs.forEach(input => input.remove());
+
+           // Add selected tickets to form
+           selectedTickets.forEach((ticket) => {
+             const input = document.createElement("input");
+             input.type = "hidden";
+             input.name = "tickets";
+             input.value = ticket;
+             this.appendChild(input);
+           });
+
+           console.log("Form action:", this.action);
+           console.log("Form method:", this.method);
+
+           // Submit the form programmatically to ensure it works
+           setTimeout(() => {
+             this.submit();
+           }, 100);
+
+           // Prevent default to use our custom submission
+           e.preventDefault();
+         });
+
+      // Initialize
+      updateSelectedCount();
+      updateSubmitButtons();
+      updateTotalAmount();
+    </script>
+  </body>
+</html>

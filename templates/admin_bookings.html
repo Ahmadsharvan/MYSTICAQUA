@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>📋 All Bookings - Admin Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      .gradient-bg {
+        background: #fdfbf6; /* Warm beige background */
+      }
+      .card-glow {
+        box-shadow: 0 0 30px rgba(255, 215, 0, 0.2);
+        background: #f8f5ef; /* Slightly darker beige for cards */
+      }
+      .warm-brown-text {
+        color: #5c3a21; /* Warm brown for main text */
+      }
+      .warm-brown-light {
+        color: #8b6f5c; /* Lighter warm brown for secondary text */
+      }
+      .golden-icon {
+        color: #ffd700; /* Golden yellow for icons */
+      }
+    </style>
+  </head>
+  <body class="gradient-bg min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-white/80 backdrop-blur-md border-b border-yellow-200/30">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div class="flex justify-between items-center py-4">
+          <div class="flex items-center space-x-3">
+            <i class="fas fa-list golden-icon text-3xl"></i>
+            <h1 class="text-2xl font-bold warm-brown-text">All Bookings</h1>
+          </div>
+          <div class="flex space-x-4">
+            <a
+              href="{{ url_for('admin_dashboard') }}"
+              class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg transition-all duration-300"
+            >
+              <i class="fas fa-arrow-left mr-2"></i>Back to Dashboard
+            </a>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="py-8 px-4 sm:px-6 lg:px-8">
+      <div class="max-w-7xl mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-8">
+          <h2 class="text-4xl font-bold warm-brown-text mb-4">
+            📋 All Bookings
+          </h2>
+          <p class="warm-brown-light text-lg">
+            View all ticket bookings and payment details
+          </p>
+        </div>
+
+        <!-- Statistics -->
+        <div class="card-glow rounded-2xl p-6 border border-yellow-200/30 mb-8">
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-6 text-center">
+            <div>
+              <h3 class="text-2xl font-bold warm-brown-text">
+                {{ bookings|length }}
+              </h3>
+              <p class="warm-brown-light">Total Bookings</p>
+            </div>
+            <div>
+              <h3 class="text-2xl font-bold warm-brown-text">
+                ₹{{ bookings|sum(attribute='Total_Amount') if bookings else 0 }}
+              </h3>
+              <p class="warm-brown-light">Total Revenue</p>
+            </div>
+            <div>
+              <h3 class="text-2xl font-bold warm-brown-text">
+                {{ bookings|selectattr('Payment_Status', 'equalto',
+                'Paid')|list|length if bookings else 0 }}
+              </h3>
+              <p class="warm-brown-light">Paid Bookings</p>
+            </div>
+            <div>
+              <h3 class="text-2xl font-bold warm-brown-text">
+                {{ bookings|selectattr('Payment_Status', 'equalto',
+                'Pending')|list|length if bookings else 0 }}
+              </h3>
+              <p class="warm-brown-light">Pending Payments</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Bookings Table -->
+        {% if bookings %}
+        <div
+          class="card-glow rounded-2xl border border-yellow-200/30 overflow-hidden"
+        >
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead class="bg-yellow-100">
+                <tr>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium warm-brown-text uppercase tracking-wider"
+                  >
+                    Customer
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium warm-brown-text uppercase tracking-wider"
+                  >
+                    Tickets
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium warm-brown-text uppercase tracking-wider"
+                  >
+                    Amount
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium warm-brown-text uppercase tracking-wider"
+                  >
+                    Payment Status
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium warm-brown-text uppercase tracking-wider"
+                  >
+                    Transaction ID
+                  </th>
+                  <th
+                    class="px-6 py-3 text-left text-xs font-medium warm-brown-text uppercase tracking-wider"
+                  >
+                    Booking Date
+                  </th>
+                </tr>
+              </thead>
+              <tbody class="bg-white divide-y divide-yellow-200">
+                {% for booking in bookings %}
+                <tr class="hover:bg-yellow-50 transition-colors duration-200">
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div>
+                      <div class="text-sm font-medium warm-brown-text">
+                        {{ booking.Name }}
+                      </div>
+                      <div class="text-sm warm-brown-light">
+                        {{ booking.Mobile }}
+                      </div>
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm warm-brown-text">
+                      {% set ticket_list = booking.Tickets.split(', ') %} {% for
+                      ticket in ticket_list[:3] %}
+                      <span
+                        class="inline-block bg-yellow-100 text-yellow-800 text-xs px-2 py-1 rounded mr-1 mb-1"
+                      >
+                        {{ ticket }}
+                      </span>
+                      {% endfor %} {% if ticket_list|length > 3 %}
+                      <span class="text-xs warm-brown-light"
+                        >+{{ ticket_list|length - 3 }} more</span
+                      >
+                      {% endif %}
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm font-medium warm-brown-text">
+                      ₹{{ booking.Total_Amount }}
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    {% if booking.Payment_Status == 'Paid' %}
+                    <span
+                      class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800"
+                    >
+                      <i class="fas fa-check mr-1"></i>Paid
+                    </span>
+                    {% else %}
+                    <span
+                      class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800"
+                    >
+                      <i class="fas fa-clock mr-1"></i>Pending
+                    </span>
+                    {% endif %}
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm warm-brown-light font-mono">
+                      {{ booking.Transaction_Ref if booking.Transaction_Ref else
+                      'N/A' }}
+                    </div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap">
+                    <div class="text-sm warm-brown-light">
+                      {{ booking.Booking_Date }}
+                    </div>
+                  </td>
+                </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Export Button -->
+        <div class="mt-8 text-center">
+          <a
+            href="{{ url_for('admin_export_data') }}"
+            class="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 inline-flex items-center space-x-2"
+          >
+            <i class="fas fa-download mr-2"></i>
+            <span>Export to Excel</span>
+          </a>
+        </div>
+
+        {% else %}
+        <!-- No Bookings -->
+        <div
+          class="card-glow rounded-2xl p-12 border border-yellow-200/30 text-center"
+        >
+          <i class="fas fa-ticket-alt golden-icon text-6xl mb-4"></i>
+          <h3 class="text-2xl font-bold warm-brown-text mb-2">
+            No Bookings Yet
+          </h3>
+          <p class="warm-brown-light text-lg mb-6">
+            No tickets have been booked yet. Bookings will appear here once
+            customers start purchasing tickets.
+          </p>
+          <a
+            href="{{ url_for('index') }}"
+            class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg transition-all duration-300 inline-flex items-center space-x-2"
+          >
+            <i class="fas fa-home mr-2"></i>
+            <span>Go to Website</span>
+          </a>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer
+      class="bg-white/80 backdrop-blur-md border-t border-yellow-200/30 py-4"
+    >
+      <div class="max-w-7xl mx-auto px-4 text-center warm-brown-light text-sm">
+        <p>&copy; 2025 Lucky Draw Admin Panel. All rights reserved.</p>
+      </div>
+    </footer>
+  </body>
+</html>
