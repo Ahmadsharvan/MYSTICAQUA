@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Lucky Draw Web Application with Real-Time Payment Integration
-A Flask-based web application for managing lucky draw ticket bookings with Razorpay integration
+WinsHaven Web Application
+A Flask-based web application for managing lucky draw ticket bookings
 """
 
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
@@ -11,43 +11,47 @@ import os
 import json
 from datetime import datetime
 import shutil
-# import razorpay  # Commented out due to environment issues
 import uuid
 
-app = Flask(__name__)
-app.secret_key = SECRET_KEY
-socketio = SocketIO(app, cors_allowed_origins="*")
-
 # Configuration
-TICKET_PRICE = 5
-UPI_ID = "9353539771@pthdfc"
-TOTAL_TICKETS = 500
-
-# Razorpay Configuration (Replace with your actual keys)
-RAZORPAY_KEY_ID = "rzp_test_RCR5h6SGPZzgsE"  # Your Key ID
-RAZORPAY_KEY_SECRET = "ymjnVfFTax8cruQAuHY6a2Kl"    # Your Key Secret
-
-# Production Configuration
 import os
-SECRET_KEY = os.environ.get('SECRET_KEY', 'your-secret-key-here')
+from flask_cors import CORS
+
+SECRET_KEY = os.environ.get('SECRET_KEY', 'change-this-secret-key-in-production')
 DEBUG = os.environ.get('FLASK_ENV') != 'production'
 
-# Initialize Razorpay client (commented out due to environment issues)
-# razorpay_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+# App initialization
+app = Flask(__name__)
+app.secret_key = SECRET_KEY
+CORS(app)
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Constants
+TICKET_PRICE = 50
+UPI_ID = "your-upi-id@bank"  # Replace with your actual UPI ID
+UPI_DISPLAY = "WinsHaven"  # Display name for UPI
+TOTAL_TICKETS = 1000
+
+# Prize Pool Configuration
+PRIZE_POOL = {
+    "first": 5000,
+    "second": 2000,
+    "third": 1000,
+    "third_count": 3
+}
+
+# Social Media Links
+WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YOUR_GROUP_ID"  # Replace with your WhatsApp group link
+TELEGRAM_GROUP_LINK = "https://t.me/YOUR_GROUP_ID"  # Replace with your Telegram group link
 
 # File paths
 EXCEL_FILE = "data/bookings.xlsx"
 TICKETS_FILE = "data/tickets.json"
 
-# Global dictionaries for payment management
-VALID_TRANSACTIONS = {
-    "524472913877": {"amount": 10, "verified": True}  # Your test transaction
-}
-
-# Real-time payment tracking
-PENDING_PAYMENTS = {}  # Store pending payments
-RECENT_PAYMENTS = {}   # Store recently received payments
-PAYMENT_ORDERS = {}    # Store Razorpay orders
+# Global dictionaries for payment management and tracking
+VALID_TRANSACTIONS = {}  # Store validated transactions
+PENDING_PAYMENTS = {}   # Store pending payments
+RECENT_PAYMENTS = {}    # Store recently received payments
 
 def ensure_data_directory():
     """Ensure data directory exists"""
@@ -58,7 +62,7 @@ def initialize_excel():
     if not os.path.exists(EXCEL_FILE):
         df = pd.DataFrame(columns=[
             'Name', 'Mobile', 'Tickets', 'Total_Amount', 
-            'Payment_Status', 'Transaction_Ref', 'Booking_Date', 'Razorpay_Order_ID'
+            'Payment_Status', 'Transaction_Ref', 'Booking_Date'
         ])
         df.to_excel(EXCEL_FILE, index=False)
 
@@ -72,6 +76,19 @@ def initialize_tickets():
         
         with open(TICKETS_FILE, 'w') as f:
             json.dump(tickets, f, indent=2)
+    else:
+        # Check if we need to add more tickets (upgrade from 500 to 1000)
+        existing_tickets = load_tickets()
+        max_existing = max(int(key) for key in existing_tickets.keys()) if existing_tickets else 0
+        
+        if max_existing < TOTAL_TICKETS:
+            print(f"🔄 Upgrading tickets from {max_existing} to {TOTAL_TICKETS}")
+            for i in range(max_existing + 1, TOTAL_TICKETS + 1):
+                ticket_key = f"{i:04d}"
+                existing_tickets[ticket_key] = {"available": True}
+            
+            save_tickets(existing_tickets)
+            print(f"✅ Added {TOTAL_TICKETS - max_existing} new tickets")
 
 def load_tickets():
     """Load ticket availability from JSON file"""
@@ -93,47 +110,14 @@ def update_ticket_availability(selected_tickets):
             tickets[ticket]["available"] = False
     save_tickets(tickets)
 
-def create_razorpay_order(amount, user_data):
-    """Create a Razorpay order for payment"""
-    try:
-        # Generate a simple order ID for testing
-        order_id = f"order_{uuid.uuid4().hex[:16]}"
-        
-        # Create order data
-        order_data = {
-            'id': order_id,
-            'amount': amount * 100,  # Razorpay expects amount in paise
-            'currency': 'INR',
-            'receipt': f"lucky_draw_{uuid.uuid4().hex[:8]}",
-            'status': 'created',
-            'created_at': int(datetime.now().timestamp())
-        }
-        
-        # Store order details
-        PAYMENT_ORDERS[order_id] = {
-            'user_data': user_data,
-            'amount': amount,
-            'status': 'created',
-            'created_at': datetime.now().isoformat()
-        }
-        
-        print(f"💰 Created test order: {order_id} for ₹{amount}")
-        return order_data
-        
-    except Exception as e:
-        print(f"❌ Error creating order: {e}")
-        return None
-
-def verify_razorpay_payment(payment_id, order_id, signature):
-    """Verify Razorpay payment signature (simplified for testing)"""
-    try:
-        # For testing, we'll just check if the order exists
-        if order_id in PAYMENT_ORDERS:
-            return True
-        return False
-    except Exception as e:
-        print(f"❌ Payment verification failed: {e}")
-        return False
+def make_tickets_available(selected_tickets):
+    """Make tickets available again after rejection"""
+    tickets = load_tickets()
+    for ticket in selected_tickets:
+        if ticket in tickets:
+            tickets[ticket]["available"] = True
+    save_tickets(tickets)
+    print(f"🔄 Made {len(selected_tickets)} tickets available again: {', '.join(selected_tickets)}")
 
 def add_valid_transaction(transaction_id, amount):
     """Add a valid transaction to the database"""
@@ -271,75 +255,29 @@ def handle_join_payment_session(data):
         print(f"👤 User joined payment session: {session_id}")
         emit('payment_session_joined', {'session_id': session_id})
 
-@socketio.on('payment_completed')
-def handle_payment_completed(data):
-    """Handle payment completion notification"""
-    order_id = data.get('order_id')
-    payment_id = data.get('payment_id')
-    
-    if order_id and order_id in PAYMENT_ORDERS:
-        # Update order status
-        PAYMENT_ORDERS[order_id]['status'] = 'completed'
-        PAYMENT_ORDERS[order_id]['payment_id'] = payment_id
-        PAYMENT_ORDERS[order_id]['completed_at'] = datetime.now().isoformat()
-        
-        # Get user data
-        user_data = PAYMENT_ORDERS[order_id]['user_data']
-        amount = PAYMENT_ORDERS[order_id]['amount']
-        
-        # Complete booking
-        complete_booking_with_razorpay(order_id, payment_id, user_data, amount)
-        
-        # Notify all clients about payment completion
-        socketio.emit('payment_success', {
-            'order_id': order_id,
-            'user_name': user_data['name'],
-            'amount': amount,
-            'tickets': user_data['tickets']
-        })
-        
-        print(f"✅ Payment completed: {user_data['name']} - ₹{amount}")
+# Health check route
+@app.route('/health')
+def health_check():
+    """Health check endpoint for Vercel"""
+    return jsonify({
+        'status': 'ok',
+        'message': 'WinsHaven API is running',
+        'tickets_initialized': os.path.exists(TICKETS_FILE),
+        'data_dir_exists': os.path.exists('data')
+    })
 
-def complete_booking_with_razorpay(order_id, payment_id, user_data, amount):
-    """Complete booking with Razorpay payment details"""
-    try:
-        ensure_data_directory()
-        initialize_excel()
-        
-        # Prepare booking data
-        booking_data = {
-            'Name': user_data['name'],
-            'Mobile': user_data['mobile'],
-            'Tickets': ', '.join(user_data['tickets']),
-            'Total_Amount': amount,
-            'Payment_Status': 'Paid',
-            'Transaction_Ref': payment_id,
-            'Booking_Date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
-            'Razorpay_Order_ID': order_id
-        }
-        
-        # Save to Excel
-        df = pd.read_excel(EXCEL_FILE)
-        df = pd.concat([df, pd.DataFrame([booking_data])], ignore_index=True)
-        df.to_excel(EXCEL_FILE, index=False)
-        
-        # Update ticket availability
-        update_ticket_availability(user_data['tickets'])
-        
-        print(f"✅ Booking completed: {user_data['name']} - Order: {order_id}")
-        
-    except Exception as e:
-        print(f"❌ Error completing booking: {e}")
+# REMOVE: Razorpay Configuration and API keys
+# REMOVE: RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET, razorpay_client
+# REMOVE: PAYMENT_ORDERS and all references
+# REMOVE: create_razorpay_order, verify_razorpay_payment, complete_booking_with_razorpay
+# REMOVE: /razorpay_webhook route and handler
 
-@app.route('/test_razorpay')
-def test_razorpay():
-    """Test Razorpay payment window"""
-    return send_file('test_razorpay.html')
+
 
 @app.route('/')
 def index():
     """Home page with user registration form"""
-    return render_template('index.html')
+    return render_template('index.html', prize_pool=PRIZE_POOL)
 
 @app.route('/submit_user', methods=['POST'])
 def submit_user():
@@ -421,69 +359,40 @@ def payment():
         'upi_id': UPI_ID
     }
     
-    # Create Razorpay order
-    order = create_razorpay_order(user_data['total_amount'], user_data)
+    # REMOVE: Razorpay order creation
+    # order = create_razorpay_order(user_data['total_amount'], user_data)
     
-    if order:
-        session['razorpay_order_id'] = order['id']
-        session['payment_session_id'] = order['id']
+    # if order:
+    #     session['razorpay_order_id'] = order['id']
+    #     session['payment_session_id'] = order['id']
         
-        return render_template('payment_realtime.html', 
-                             user_data=user_data, 
-                             order=order,
-                             razorpay_key_id=RAZORPAY_KEY_ID)
-    else:
-        flash('Unable to create payment order. Please try again.', 'error')
-        return redirect(url_for('select_tickets'))
-
-@app.route('/payment_manual')
-def payment_manual():
-    """Manual payment page with transaction ID entry"""
-    if 'user_name' not in session or 'selected_tickets' not in session:
-        return redirect(url_for('index'))
-    
-    user_data = {
-        'name': session['user_name'],
-        'mobile': session['user_mobile'],
-        'tickets': session['selected_tickets'],
-        'ticket_count': len(session['selected_tickets']),
-        'total_amount': session['total_amount'],
-        'upi_id': UPI_ID
-    }
-    
-    return render_template('payment.html', user_data=user_data)
+    return render_template('payment_manual.html', user_data=user_data)
 
 @app.route('/verify_payment', methods=['POST'])
 def verify_payment():
     """Verify payment and complete booking (fallback method)"""
     if 'user_name' not in session or 'selected_tickets' not in session:
+        flash("Session expired. Please start again.", "danger")
         return redirect(url_for('index'))
     
     transaction_ref = request.form.get('transaction_ref', '').strip()
-    
-    if not transaction_ref:
-        flash('Please enter the transaction reference number', 'error')
-        return redirect(url_for('payment'))
-    
-    if len(transaction_ref) != 12 or not transaction_ref.isdigit():
-        flash('Transaction ID must be exactly 12 digits', 'error')
-        return redirect(url_for('payment'))
-    
-    # Verify transaction
-    expected_amount = session['total_amount']
-    if verify_transaction(transaction_ref, expected_amount):
-        # Payment verified, complete booking
-        return complete_booking(transaction_ref)
-    else:
-        flash('Invalid transaction ID or amount mismatch. Please check and try again.', 'error')
-        return redirect(url_for('payment'))
+    # Accept the transaction reference as is, no validation
+    complete_booking(transaction_ref, verified=False)
+    return render_template('congratulations.html', user_data={
+        'name': session.get('user_name'),
+        'mobile': session.get('user_mobile'),
+        'tickets': session.get('selected_tickets'),
+        'total_amount': session.get('total_amount'),
+        'transaction_ref': transaction_ref,
+        'verified': False
+    }, prize_pool=PRIZE_POOL, whatsapp_link=WHATSAPP_GROUP_LINK, 
+       telegram_link=TELEGRAM_GROUP_LINK)
 
-def complete_booking(transaction_ref):
+def complete_booking(transaction_ref, verified=False):
     """Complete the booking process"""
     try:
         ensure_data_directory()
         initialize_excel()
-        
         # Prepare booking data
         booking_data = {
             'Name': session['user_name'],
@@ -492,85 +401,33 @@ def complete_booking(transaction_ref):
             'Total_Amount': session['total_amount'],
             'Payment_Status': 'Paid',
             'Transaction_Ref': transaction_ref,
-            'Booking_Date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            'Booking_Date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'Verified': verified
         }
-        
         # Save to Excel
         df = pd.read_excel(EXCEL_FILE)
         df = pd.concat([df, pd.DataFrame([booking_data])], ignore_index=True)
         df.to_excel(EXCEL_FILE, index=False)
-        
         # Update ticket availability
         update_ticket_availability(session['selected_tickets'])
-        
         # Prepare user data for success page
         user_data = {
             'name': session['user_name'],
             'mobile': session['user_mobile'],
             'tickets': session['selected_tickets'],
             'total_amount': session['total_amount'],
-            'transaction_ref': transaction_ref
+            'transaction_ref': transaction_ref,
+            'verified': verified
         }
-        
         # Clear session
         session.clear()
-        
-        return render_template('success.html', user_data=user_data)
-        
+        return render_template('success.html', user_data=user_data, 
+                             prize_pool=PRIZE_POOL, whatsapp_link=WHATSAPP_GROUP_LINK, 
+                             telegram_link=TELEGRAM_GROUP_LINK)
     except Exception as e:
         print(f"Error completing booking: {e}")
         flash('An error occurred while completing your booking. Please try again.', 'error')
         return redirect(url_for('payment'))
-
-# Razorpay Webhook endpoint
-@app.route('/razorpay_webhook', methods=['POST'])
-def razorpay_webhook():
-    """Handle Razorpay webhook for payment confirmation"""
-    try:
-        # Verify webhook signature
-        webhook_signature = request.headers.get('X-Razorpay-Signature')
-        webhook_body = request.get_data()
-        
-        # Verify webhook (you should implement proper signature verification)
-        # razorpay_client.utility.verify_webhook_signature(webhook_body, webhook_signature, webhook_secret)
-        
-        # Parse webhook data
-        webhook_data = request.get_json()
-        event = webhook_data.get('event')
-        
-        if event == 'payment.captured':
-            payment_data = webhook_data.get('payload', {}).get('payment', {})
-            order_id = payment_data.get('order_id')
-            payment_id = payment_data.get('id')
-            amount = payment_data.get('amount') / 100  # Convert from paise to rupees
-            
-            if order_id and order_id in PAYMENT_ORDERS:
-                # Update order status
-                PAYMENT_ORDERS[order_id]['status'] = 'completed'
-                PAYMENT_ORDERS[order_id]['payment_id'] = payment_id
-                PAYMENT_ORDERS[order_id]['completed_at'] = datetime.now().isoformat()
-                
-                # Get user data
-                user_data = PAYMENT_ORDERS[order_id]['user_data']
-                
-                # Complete booking
-                complete_booking_with_razorpay(order_id, payment_id, user_data, amount)
-                
-                # Notify all clients about payment completion
-                socketio.emit('payment_success', {
-                    'order_id': order_id,
-                    'user_name': user_data['name'],
-                    'amount': amount,
-                    'tickets': user_data['tickets']
-                })
-                
-                print(f"✅ Webhook: Payment completed for {user_data['name']} - ₹{amount}")
-        
-        return jsonify({'status': 'success'}), 200
-        
-    except Exception as e:
-        print(f"❌ Webhook error: {e}")
-        return jsonify({'status': 'error'}), 500
 
 # Admin Routes
 @app.route('/admin')
@@ -596,7 +453,6 @@ def admin_reset_data():
         PENDING_PAYMENTS.clear()
         RECENT_PAYMENTS.clear()
         VALID_TRANSACTIONS.clear()
-        PAYMENT_ORDERS.clear()
         
         # Reinitialize
         initialize_excel()
@@ -726,6 +582,36 @@ def admin_generate_qr():
     
     return redirect(url_for('admin_dashboard'))
 
+@app.route('/admin/verify_payment/<int:booking_id>/<status>')
+def admin_verify_payment(booking_id, status):
+    """Mark payment as verified or rejected"""
+    try:
+        if os.path.exists(EXCEL_FILE):
+            df = pd.read_excel(EXCEL_FILE)
+            if booking_id < len(df):
+                booking = df.iloc[booking_id]
+                
+                if status == 'verify':
+                    df.at[booking_id, 'Verified'] = 'Yes'
+                    flash('Payment marked as verified!', 'success')
+                elif status == 'reject':
+                    df.at[booking_id, 'Verified'] = 'No'
+                    
+                    # Make tickets available again when rejected
+                    tickets = str(booking['Tickets']).split(', ')
+                    make_tickets_available(tickets)
+                    
+                    flash(f'Payment marked as rejected! {len(tickets)} tickets made available again.', 'warning')
+                df.to_excel(EXCEL_FILE, index=False)
+            else:
+                flash('Invalid booking ID', 'error')
+        else:
+            flash('No bookings found', 'error')
+    except Exception as e:
+        flash(f'Error updating verification: {e}', 'error')
+    
+    return redirect(url_for('admin_view_bookings'))
+
 # Real-time payment verification endpoint
 @app.route('/api/check_payment/<session_id>')
 def api_check_payment(session_id):
@@ -749,20 +635,24 @@ def api_check_payment(session_id):
         'message': 'Payment session not found'
     })
 
+def create_app():
+    try:
+        ensure_data_directory()
+        initialize_excel()
+        initialize_tickets()
+    except Exception as e:
+        print(f"Warning: Could not initialize data: {e}")
+    return app
+
+# Initialize app for Vercel
+create_app()
+
 if __name__ == '__main__':
-    ensure_data_directory()
-    initialize_excel()
-    initialize_tickets()
-    print("🎯 Lucky Draw Application with Real-Time Payments Started!")
+    print("🎯 WinsHaven Application Started!")
     print("🌐 Website: http://localhost:5000")
     print("🔧 Admin Panel: http://localhost:5000/admin")
     print("📱 QR Code: Run 'python generate_website_qr.py' to generate")
-    print("💳 Razorpay Integration: Configure your API keys in the code")
-    
+
     # Production vs Development
-    if DEBUG:
-        socketio.run(app, debug=True, host='0.0.0.0', port=5000)
-    else:
-        # For production, use the port provided by the hosting platform
-        port = int(os.environ.get('PORT', 5000))
-        socketio.run(app, host='0.0.0.0', port=port)
+    port = int(os.environ.get('PORT', 5000))
+    socketio.run(app, host='0.0.0.0', port=port, allow_unsafe_werkzeug=True)
