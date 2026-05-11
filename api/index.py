@@ -2,21 +2,34 @@ import sys
 import os
 from pathlib import Path
 
-# Set up path to import from parent directory
+# Set up path
 parent = str(Path(__file__).parent.parent)
 if parent not in sys.path:
     sys.path.insert(0, parent)
 
-# Ensure data directory exists
-data_dir = os.path.join(parent, "data")
-os.makedirs(data_dir, exist_ok=True)
+try:
+    # Create data directory
+    data_dir = os.path.join(parent, "data")
+    os.makedirs(data_dir, exist_ok=True)
 
-# Import and configure Flask app
-from app import app
+    # Import app
+    from app import app
 
-# This is the WSGI application that Vercel calls
-application = app
-app.wsgi_app = app.wsgi_app
+    # WSGI application
+    application = app
+
+except Exception as e:
+    # If import fails, create a minimal Flask app that returns the error
+    from flask import Flask, jsonify
+    application = Flask(__name__)
+
+    @application.route('/')
+    def error():
+        return jsonify({
+            "error": str(e),
+            "type": type(e).__name__
+        }), 500
+
 
 
 
