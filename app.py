@@ -18,7 +18,12 @@ import json
 from datetime import datetime
 import shutil
 
-app = Flask(__name__)
+# Get the absolute path to the app directory
+app_dir = os.path.dirname(os.path.abspath(__file__))
+template_dir = os.path.join(app_dir, 'templates')
+static_dir = os.path.join(app_dir, 'static')
+
+app = Flask(__name__, template_folder=template_dir, static_folder=static_dir)
 app.secret_key = os.environ.get('SECRET_KEY', 'change-this-secret-key-in-production')  # Use environment variable
 
 # Configuration
