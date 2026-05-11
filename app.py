@@ -1,23 +1,42 @@
 #!/usr/bin/env python3
 """
-Lucky Draw Web Application
+WinsHaven Web Application
 A Flask-based web application for managing lucky draw ticket bookings
 """
 
+import sys
+import os
+
+# Fix Unicode encoding on Windows
+if sys.platform == 'win32':
+    import io
+    sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
 import pandas as pd
-import os
 import json
 from datetime import datetime
 import shutil
 
 app = Flask(__name__)
-app.secret_key = 'your-secret-key-here'  # Change this in production
+app.secret_key = os.environ.get('SECRET_KEY', 'change-this-secret-key-in-production')  # Use environment variable
 
 # Configuration
-TICKET_PRICE = 5
-UPI_ID = "9353539771@pthdfc"
-TOTAL_TICKETS = 500
+TICKET_PRICE = 50
+UPI_ID = "your-upi-id@bank"  # Replace with your actual UPI ID
+TOTAL_TICKETS = 1000
+
+# Prize Pool Configuration
+PRIZE_POOL = {
+    "first": 5000,
+    "second": 2000,
+    "third": 1000,
+    "third_count": 3
+}
+
+# Social Media Links
+WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YOUR_GROUP_ID"  # Replace with your WhatsApp group link
+TELEGRAM_GROUP_LINK = "https://t.me/YOUR_GROUP_ID"  # Replace with your Telegram group link
 
 # File paths
 EXCEL_FILE = "data/bookings.xlsx"
@@ -25,7 +44,7 @@ TICKETS_FILE = "data/tickets.json"
 
 # Global dictionaries for payment management
 VALID_TRANSACTIONS = {
-    "524472913877": {"amount": 10, "verified": True}  # Your test transaction
+    # Add valid transaction IDs here as needed
 }
 
 # Automatic payment detection system
@@ -46,20 +65,51 @@ def initialize_excel():
     if not os.path.exists(EXCEL_FILE):
         df = pd.DataFrame(columns=[
             'Name', 'Mobile', 'Tickets', 'Total_Amount', 
-            'Payment_Status', 'Transaction_Ref', 'Booking_Date'
+            'Payment_Status', 'Transaction_Ref', 'Booking_Date', 'Verified'
         ])
         df.to_excel(EXCEL_FILE, index=False)
 
 def initialize_tickets():
-    """Initialize tickets JSON file"""
+    """Initialize tickets JSON file with enhanced persistence"""
     if not os.path.exists(TICKETS_FILE):
         tickets = {}
         for i in range(1, TOTAL_TICKETS + 1):
             ticket_key = f"{i:04d}"
-            tickets[ticket_key] = {"available": True}
-        
+            tickets[ticket_key] = {
+                "available": True,
+                "booked_by": None,
+                "booked_date": None,
+                "user_mobile": None,
+                "transaction_id": None,
+                "status": "available",  # available, locked, booked, verification_pending, verified
+                "locked_at": None,
+                "locked_by_session": None
+            }
+
         with open(TICKETS_FILE, 'w') as f:
             json.dump(tickets, f, indent=2)
+    else:
+        # Check if we need to add more tickets (upgrade from 500 to 1000)
+        existing_tickets = load_tickets()
+        max_existing = max(int(key) for key in existing_tickets.keys()) if existing_tickets else 0
+
+        if max_existing < TOTAL_TICKETS:
+            print(f"🔄 Upgrading tickets from {max_existing} to {TOTAL_TICKETS}")
+            for i in range(max_existing + 1, TOTAL_TICKETS + 1):
+                ticket_key = f"{i:04d}"
+                existing_tickets[ticket_key] = {
+                    "available": True,
+                    "booked_by": None,
+                    "booked_date": None,
+                    "user_mobile": None,
+                    "transaction_id": None,
+                    "status": "available",
+                    "locked_at": None,
+                    "locked_by_session": None
+                }
+
+            save_tickets(existing_tickets)
+            print(f"✅ Added {TOTAL_TICKETS - max_existing} new tickets")
 
 def load_tickets():
     """Load ticket availability from JSON file"""
@@ -73,13 +123,83 @@ def save_tickets(tickets):
     with open(TICKETS_FILE, 'w') as f:
         json.dump(tickets, f, indent=2)
 
-def update_ticket_availability(selected_tickets):
-    """Update ticket availability after booking"""
+def update_ticket_availability(selected_tickets, user_data=None, transaction_id=None):
+    """Update ticket availability after booking with enhanced metadata"""
     tickets = load_tickets()
     for ticket in selected_tickets:
         if ticket in tickets:
             tickets[ticket]["available"] = False
+            tickets[ticket]["status"] = "booked"
+            tickets[ticket]["booked_date"] = datetime.now().isoformat()
+
+            if user_data:
+                tickets[ticket]["booked_by"] = user_data.get('name', 'Unknown')
+                tickets[ticket]["user_mobile"] = user_data.get('mobile', None)
+
+            if transaction_id:
+                tickets[ticket]["transaction_id"] = transaction_id
+                tickets[ticket]["status"] = "verified"
+            else:
+                tickets[ticket]["status"] = "verification_pending"
+
     save_tickets(tickets)
+    print(f"✅ Updated {len(selected_tickets)} tickets to booked status")
+
+def lock_tickets_for_payment(selected_tickets, session_id):
+    """Temporarily lock tickets during payment process (strict locking)"""
+    tickets = load_tickets()
+    current_time = datetime.now().isoformat()
+
+    for ticket in selected_tickets:
+        if ticket in tickets:
+            # Check if ticket is still available
+            if not tickets[ticket].get("available", True):
+                return False  # Ticket is already booked
+
+            tickets[ticket]["status"] = "locked"
+            tickets[ticket]["locked_at"] = current_time
+            tickets[ticket]["locked_by_session"] = session_id
+
+    save_tickets(tickets)
+    print(f"🔒 Locked {len(selected_tickets)} tickets for session {session_id}")
+    return True
+
+def unlock_tickets(selected_tickets, session_id):
+    """Unlock tickets if payment is cancelled or fails"""
+    tickets = load_tickets()
+
+    for ticket in selected_tickets:
+        if ticket in tickets:
+            # Only unlock if locked by same session
+            if tickets[ticket].get("locked_by_session") == session_id:
+                tickets[ticket]["status"] = "available"
+                tickets[ticket]["locked_at"] = None
+                tickets[ticket]["locked_by_session"] = None
+
+    save_tickets(tickets)
+    print(f"🔓 Unlocked {len(selected_tickets)} tickets for session {session_id}")
+
+def make_tickets_available(selected_tickets, admin_action=False):
+    """Make tickets available again after rejection (admin-only)"""
+    if not admin_action:
+        print("❌ Cannot make tickets available without admin action")
+        return False
+
+    tickets = load_tickets()
+    for ticket in selected_tickets:
+        if ticket in tickets:
+            tickets[ticket]["available"] = True
+            tickets[ticket]["status"] = "available"
+            tickets[ticket]["booked_by"] = None
+            tickets[ticket]["booked_date"] = None
+            tickets[ticket]["user_mobile"] = None
+            tickets[ticket]["transaction_id"] = None
+            tickets[ticket]["locked_at"] = None
+            tickets[ticket]["locked_by_session"] = None
+
+    save_tickets(tickets)
+    print(f"🔄 Made {len(selected_tickets)} tickets available again (Admin Action)")
+    return True
 
 def add_valid_transaction(transaction_id, amount):
     """Add a valid transaction to the database"""
@@ -169,6 +289,13 @@ def add_received_payment(amount, actual_transaction_id=None):
     else:
         return f"Payment added to recent payments. Waiting for matching pending payment."
 
+def get_ticket_booking_history(ticket_key):
+    """Get complete booking history for a ticket"""
+    tickets = load_tickets()
+    if ticket_key in tickets:
+        return tickets[ticket_key]
+    return None
+
 def get_statistics():
     """Get statistics for admin dashboard"""
     try:
@@ -203,7 +330,7 @@ def get_statistics():
 @app.route('/')
 def index():
     """Home page with user registration form"""
-    return render_template('index.html')
+    return render_template('index.html', prize_pool=PRIZE_POOL)
 
 
 
@@ -311,16 +438,11 @@ def verify_payment():
         flash('Transaction ID must be exactly 12 digits', 'error')
         return redirect(url_for('payment'))
     
-    # Verify transaction
-    expected_amount = session['total_amount']
-    if verify_transaction(transaction_ref, expected_amount):
-        # Payment verified, complete booking
-        return complete_booking(transaction_ref)
-    else:
-        flash('Invalid transaction ID or amount mismatch. Please check and try again.', 'error')
-        return redirect(url_for('payment'))
+    # Accept any 12-digit reference number and complete booking
+    # Admin can verify later using the verification system
+    return complete_booking(transaction_ref, verified=False)
 
-def complete_booking(transaction_ref):
+def complete_booking(transaction_ref, verified=False):
     """Complete the booking process"""
     try:
         ensure_data_directory()
@@ -334,7 +456,8 @@ def complete_booking(transaction_ref):
             'Total_Amount': session['total_amount'],
             'Payment_Status': 'Paid',
             'Transaction_Ref': transaction_ref,
-            'Booking_Date': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            'Booking_Date': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'Verified': 'Yes' if verified else 'Pending'
         }
         
         # Save to Excel
@@ -357,7 +480,9 @@ def complete_booking(transaction_ref):
         # Clear session
         session.clear()
         
-        return render_template('success.html', user_data=user_data)
+        return render_template('success.html', user_data=user_data, 
+                             prize_pool=PRIZE_POOL, whatsapp_link=WHATSAPP_GROUP_LINK, 
+                             telegram_link=TELEGRAM_GROUP_LINK)
         
     except Exception as e:
         print(f"Error completing booking: {e}")
@@ -517,6 +642,36 @@ def admin_generate_qr():
     
     return redirect(url_for('admin_dashboard'))
 
+@app.route('/admin/verify_payment/<int:booking_id>/<status>')
+def admin_verify_payment(booking_id, status):
+    """Mark payment as verified or rejected"""
+    try:
+        if os.path.exists(EXCEL_FILE):
+            df = pd.read_excel(EXCEL_FILE)
+            if booking_id < len(df):
+                booking = df.iloc[booking_id]
+                
+                if status == 'verify':
+                    df.at[booking_id, 'Verified'] = 'Yes'
+                    flash('Payment marked as verified!', 'success')
+                elif status == 'reject':
+                    df.at[booking_id, 'Verified'] = 'No'
+                    
+                    # Make tickets available again when rejected
+                    tickets = str(booking['Tickets']).split(', ')
+                    make_tickets_available(tickets)
+                    
+                    flash(f'Payment marked as rejected! {len(tickets)} tickets made available again.', 'warning')
+                df.to_excel(EXCEL_FILE, index=False)
+            else:
+                flash('Invalid booking ID', 'error')
+        else:
+            flash('No bookings found', 'error')
+    except Exception as e:
+        flash(f'Error updating verification: {e}', 'error')
+    
+    return redirect(url_for('admin_view_bookings'))
+
 # Real-time payment verification endpoint
 @app.route('/api/check_payment/<session_id>')
 def api_check_payment(session_id):
@@ -544,7 +699,7 @@ if __name__ == '__main__':
     ensure_data_directory()
     initialize_excel()
     initialize_tickets()
-    print("🎯 Lucky Draw Application Started!")
+    print("🎯 WinsHaven Application Started!")
     print("🌐 Website: http://localhost:5000")
     print("🔧 Admin Panel: http://localhost:5000/admin")
     print("📱 QR Code: Run 'python generate_website_qr.py' to generate")
