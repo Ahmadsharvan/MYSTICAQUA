@@ -38,9 +38,11 @@ PRIZE_POOL = {
 WHATSAPP_GROUP_LINK = "https://chat.whatsapp.com/YOUR_GROUP_ID"  # Replace with your WhatsApp group link
 TELEGRAM_GROUP_LINK = "https://t.me/YOUR_GROUP_ID"  # Replace with your Telegram group link
 
-# File paths
-EXCEL_FILE = "data/bookings.xlsx"
-TICKETS_FILE = "data/tickets.json"
+# File paths (use tmp directory for Vercel serverless)
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(BASE_DIR, "data")
+EXCEL_FILE = os.path.join(DATA_DIR, "bookings.xlsx")
+TICKETS_FILE = os.path.join(DATA_DIR, "tickets.json")
 
 # Global dictionaries for payment management
 VALID_TRANSACTIONS = {
@@ -58,7 +60,10 @@ RECENT_PAYMENTS = {}   # Store recently received payments
 
 def ensure_data_directory():
     """Ensure data directory exists"""
-    os.makedirs("data", exist_ok=True)
+    try:
+        os.makedirs(DATA_DIR, exist_ok=True)
+    except Exception as e:
+        print(f"⚠️  Warning: Could not create data directory: {e}")
 
 def initialize_excel():
     """Initialize Excel file with headers if it doesn't exist"""
